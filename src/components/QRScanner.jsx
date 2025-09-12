@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { Camera, CameraOff, RotateCcw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useState, useRef } from "react";
+import { motion } from "framer-motion";
+import { Camera, CameraOff, RotateCcw } from "lucide-react";
+import { QrCode, Users, Star, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // Note: react-qr-scanner might need different import in actual implementation
 // This is a placeholder component structure
@@ -16,21 +17,20 @@ const QRScanner = ({ onScan, onError }) => {
       // TODO: Implement actual QR scanner with react-qr-scanner
       setIsScanning(true);
       setHasPermission(true);
-      
+
       // Placeholder: Simulate QR scan after 3 seconds
       setTimeout(() => {
         const mockQRData = {
-          attendeeId: 'mock-qr-' + Date.now(),
-          name: 'Jane Smith',
-          phone: '555-0123'
+          attendeeId: "mock-qr-" + Date.now(),
+          name: "Jane Smith",
+          phone: "555-0123",
         };
         onScan?.(mockQRData);
       }, 3000);
-      
     } catch (error) {
-      console.error('Camera access denied:', error);
+      console.error("Camera access denied:", error);
       setHasPermission(false);
-      onError?.('Camera access denied. Please enable camera permissions.');
+      onError?.("Camera access denied. Please enable camera permissions.");
     }
   };
 
@@ -53,7 +53,7 @@ const QRScanner = ({ onScan, onError }) => {
         <p className="text-muted-foreground mb-4">
           Please enable camera permissions to scan QR codes
         </p>
-        <Button 
+        <Button
           onClick={() => setHasPermission(null)}
           variant="outline"
           className="bounce-hover"
@@ -85,7 +85,7 @@ const QRScanner = ({ onScan, onError }) => {
             <p className="text-muted-foreground text-center mb-6">
               Hey friend, point your camera at a QR code to get started! ✨
             </p>
-            <Button 
+            <Button
               onClick={startScanning}
               className="bounce-hover bg-gradient-primary"
               size="lg"
@@ -100,13 +100,13 @@ const QRScanner = ({ onScan, onError }) => {
             <div className="absolute inset-4 border-2 border-primary rounded-2xl">
               <div className="absolute inset-0 bg-primary/10 animate-pulse rounded-2xl" />
               <motion.div
-                animate={{ 
-                  y: ['0%', '100%', '0%']
+                animate={{
+                  y: ["0%", "100%", "0%"],
                 }}
-                transition={{ 
-                  duration: 2, 
+                transition={{
+                  duration: 2,
                   repeat: Infinity,
-                  ease: 'easeInOut'
+                  ease: "easeInOut",
                 }}
                 className="absolute top-0 left-0 right-0 h-1 bg-primary shadow-glow"
               />
@@ -122,7 +122,7 @@ const QRScanner = ({ onScan, onError }) => {
               <p className="text-white font-medium">Scanning for QR codes...</p>
               <p className="text-white/70 text-sm mt-1">Hold steady! 📱</p>
             </div>
-            <Button 
+            <Button
               onClick={stopScanning}
               variant="secondary"
               size="sm"
