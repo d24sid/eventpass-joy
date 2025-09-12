@@ -7,13 +7,12 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write   # allow pushing to branches
   pages: write
   id-token: write
 
 jobs:
   build-and-deploy:
-    # only run when the PR was merged (not just closed)
     if: ${{ github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
     concurrency:
@@ -25,6 +24,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # keep default token (GITHUB_TOKEN) here
 
       - name: Use Node.js 18.x
         uses: actions/setup-node@v4
