@@ -367,9 +367,9 @@ export default function Home() {
                         <option value="No">No</option>
                       </select>
 
-                      <div style={{ marginTop: 12 }}>
+                      {/* <div style={{ marginTop: 12 }}>
                         <div style={s.pre}>{JSON.stringify(phoneDetails, null, 2)}</div>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                 )}
@@ -423,9 +423,9 @@ export default function Home() {
                       <option value="No">No</option>
                     </select>
 
-                    <div style={{ marginTop: 12 }}>
+                    {/* <div style={{ marginTop: 12 }}>
                       <div style={s.pre}>{JSON.stringify(phoneDetails, null, 2)}</div>
-                    </div>
+                    </div> */}
 
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
                       <button onClick={markPresence} style={s.primaryBtn} disabled={phoneLoading}>{phoneLoading ? "Updating…" : "Confirm"}</button>
