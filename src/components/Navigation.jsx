@@ -1,6 +1,6 @@
-import { Link, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Home, Info, QrCode } from 'lucide-react';
+import { Link, useLocation } from "react-router-dom";
+import { motion } from "framer-motion";
+import { Home, Info, QrCode } from "lucide-react";
 
 const Navigation = () => {
   const location = useLocation();
@@ -32,7 +32,7 @@ const Navigation = () => {
             {navItems.map((item, index) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
-              
+
               return (
                 <motion.div
                   key={item.path}
@@ -45,9 +45,10 @@ const Navigation = () => {
                     className={`
                       flex items-center space-x-2 px-4 py-2 rounded-xl
                       transition-all duration-300 bounce-hover
-                      ${isActive 
-                        ? 'bg-primary text-primary-foreground shadow-glow' 
-                        : 'text-muted-foreground hover:text-primary hover:bg-primary/10'
+                      ${
+                        isActive
+                          ? "bg-primary text-primary-foreground shadow-glow"
+                          : "text-muted-foreground hover:text-primary hover:bg-primary/10"
                       }
                     `}
                   >

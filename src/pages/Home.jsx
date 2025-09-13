@@ -7,9 +7,9 @@ export default function Home() {
   const codeReaderRef = useRef(null);
   const decodeActiveRef = useRef(false);
 
-  const lastHandledRef = useRef(null); 
-  const ignoreUntilRef = useRef(0); 
-  const fetchAbortRef = useRef(null); 
+  const lastHandledRef = useRef(null);
+  const ignoreUntilRef = useRef(0);
+  const fetchAbortRef = useRef(null);
   const isProcessingRef = useRef(false);
 
   const phoneFetchAbortRef = useRef(null);
@@ -43,7 +43,7 @@ export default function Home() {
 
     try {
       const res = await getById(id, { signal: controller.signal });
-      
+      console.log("Fetched details:", res);
       setDetails(res);
     } catch (err) {
       if (err?.name === "AbortError") {
@@ -74,10 +74,11 @@ export default function Home() {
 
     try {
       const res = await getByPhone(phone, { signal: controller.signal });
-      if(!res || (Array.isArray(res) && res.length === 0)) {
+      if (!res || (Array.isArray(res) && res.length === 0)) {
         throw new Error("No records found for this phone number.");
       }
-      setPhoneDetails(res);
+      console.log("Fetched phone details:", res);
+      setPhoneDetails(res[0]);
     } catch (err) {
       if (err?.name === "AbortError") {
         console.log("Phone fetch aborted for:", phone);
@@ -96,8 +97,7 @@ export default function Home() {
     if (codeReader) {
       try {
         codeReader.reset();
-      } catch (e) {
-      }
+      } catch (e) {}
     }
     const video = videoRef.current;
     if (video && video.srcObject) {
@@ -127,7 +127,10 @@ export default function Home() {
 
       if (isProcessingRef.current) return;
 
-      if (lastHandledRef.current === id && now < (ignoreUntilRef.current || 0)) {
+      if (
+        lastHandledRef.current === id &&
+        now < (ignoreUntilRef.current || 0)
+      ) {
         return;
       }
 
@@ -143,29 +146,40 @@ export default function Home() {
 
       fetchDetails(id);
     },
-    [fetchDetails, stopScanner]
+    [fetchDetails, stopScanner],
   );
 
   const startScanner = useCallback(async () => {
     if (decodeActiveRef.current) return;
     decodeActiveRef.current = true;
-    if (!codeReaderRef.current) codeReaderRef.current = new BrowserMultiFormatReader();
+    if (!codeReaderRef.current)
+      codeReaderRef.current = new BrowserMultiFormatReader();
     const codeReader = codeReaderRef.current;
 
     const tryStart = async () => {
       const constraints = { video: { facingMode: { exact: "environment" } } };
       try {
-        await codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
-          if (result) handleScanned(result.getText());
-        });
+        await codeReader.decodeFromConstraints(
+          constraints,
+          videoRef.current,
+          (result) => {
+            if (result) handleScanned(result.getText());
+          },
+        );
       } catch (e) {
         try {
-          await codeReader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
-            if (result) handleScanned(result.getText());
-          });
+          await codeReader.decodeFromVideoDevice(
+            undefined,
+            videoRef.current,
+            (result) => {
+              if (result) handleScanned(result.getText());
+            },
+          );
         } catch (err) {
           console.error("Camera start failed:", err);
-          setError("Unable to access camera. Please allow camera permission or use a different device.");
+          setError(
+            "Unable to access camera. Please allow camera permission or use a different device.",
+          );
           decodeActiveRef.current = false;
         }
       }
@@ -193,16 +207,13 @@ export default function Home() {
     if (fetchAbortRef.current) {
       try {
         fetchAbortRef.current.abort();
-      } catch (e) {
-        /* ignore */
-      }
+      } catch (e) {}
       fetchAbortRef.current = null;
     }
 
     try {
       stopScanner();
-    } catch (e) {
-    }
+    } catch (e) {}
 
     window.location.reload();
   }, [stopScanner]);
@@ -215,8 +226,7 @@ export default function Home() {
     if (phoneFetchAbortRef.current) {
       try {
         phoneFetchAbortRef.current.abort();
-      } catch (e) {
-      }
+      } catch (e) {}
       phoneFetchAbortRef.current = null;
     }
     setPhoneModalOpen(false);
@@ -236,7 +246,7 @@ export default function Home() {
     const trimmed = (phoneInput || "").replace(/\s+/g, "");
     const ok = /^[+\d][\d]{5,14}$/.test(trimmed);
     if (!ok) {
-      setPhoneError("Enter a valid phone number (6–15 digits, optional leading +).");
+      setPhoneError("Enter a valid phone number (10 digits) .");
       return;
     }
 
@@ -245,7 +255,7 @@ export default function Home() {
 
   const markPresence = () => {
     alert("Mark presence (implement as needed).");
-  }
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start bg-gray-50 p-6">
@@ -254,7 +264,13 @@ export default function Home() {
       {!showScanModal && !phoneModalOpen && (
         <div className="w-full max-w-md bg-white rounded-xl shadow p-4">
           <div className="rounded overflow-hidden">
-            <video ref={videoRef} style={{ width: "100%", height: "auto" }} muted playsInline autoPlay />
+            <video
+              ref={videoRef}
+              style={{ width: "100%", height: "auto" }}
+              muted
+              playsInline
+              autoPlay
+            />
           </div>
 
           <div className="mt-4 flex justify-center gap-2">
@@ -265,24 +281,35 @@ export default function Home() {
             >
               Use Phone
             </button>
-
           </div>
 
           <div className="mt-3 text-sm text-gray-600 text-center">
             {error && <span className="text-red-600">Error: {error}</span>}
-            {!error && !scannedId && <span>Point camera at QR code to scan.</span>}
-            {!error && scannedId && !loading && !details && <span>Scanned ID: {scannedId}</span>}
+            {!error && !scannedId && (
+              <span>Point camera at QR code to scan.</span>
+            )}
+            {!error && scannedId && !loading && !details && (
+              <span>Scanned ID: {scannedId}</span>
+            )}
           </div>
         </div>
       )}
 
       {/* Scan Modal (opened after a scan) */}
       {showScanModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl">
             <div className="flex justify-between items-start">
               <h2 className="text-xl font-semibold">Check-in details</h2>
-              <button onClick={closeScanModal} className="text-gray-500 hover:text-gray-800" aria-label="Close">
+              <button
+                onClick={closeScanModal}
+                className="text-gray-500 hover:text-gray-800"
+                aria-label="Close"
+              >
                 ✕
               </button>
             </div>
@@ -293,21 +320,40 @@ export default function Home() {
               </div>
 
               {loading && <div className="mt-4">Loading details…</div>}
-              {error && <div className="mt-4 text-red-600">Failed to load details: {error}</div>}
+              {error && (
+                <div className="mt-4 text-red-600">
+                  Failed to load details: {error}
+                </div>
+              )}
 
               {details && (
                 <div className="mt-4 space-y-2 text-sm">
-                  <div><strong>Name:</strong> {details.name || "—"}</div>
-                  <div><strong>Type:</strong> {details.type || "—"}</div>
-                  <div><strong>Checked in at:</strong> {details.checkedAt || "—"}</div>
-                  <div><strong>Raw response:</strong></div>
-                  <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto">{JSON.stringify(details, null, 2)}</pre>
+                  <div>
+                    <strong>Name:</strong> {details.name || "—"}
+                  </div>
+                  <div>
+                    <strong>Type:</strong> {details.type || "—"}
+                  </div>
+                  <div>
+                    <strong>Checked in at:</strong> {details.checkedAt || "—"}
+                  </div>
+                  <div>
+                    <strong>Raw response:</strong>
+                  </div>
+                  <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto">
+                    {JSON.stringify(details, null, 2)}
+                  </pre>
                 </div>
               )}
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
-              <button onClick={closeScanModal} className="px-4 py-2 rounded border">Close</button>
+              <button
+                onClick={closeScanModal}
+                className="px-4 py-2 rounded border"
+              >
+                Close
+              </button>
               <button
                 onClick={markPresence}
                 className="px-4 py-2 bg-indigo-600 text-white rounded"
@@ -321,17 +367,27 @@ export default function Home() {
 
       {/* Phone Modal */}
       {phoneModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog" aria-modal="true">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          role="dialog"
+          aria-modal="true"
+        >
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
             <div className="flex justify-between items-start">
               <h2 className="text-xl font-semibold">Lookup by Phone</h2>
-              <button onClick={closePhoneModal} className="text-gray-500 hover:text-gray-800" aria-label="Close">
+              <button
+                onClick={closePhoneModal}
+                className="text-gray-500 hover:text-gray-800"
+                aria-label="Close"
+              >
                 ✕
               </button>
             </div>
 
             <form onSubmit={handlePhoneSubmit} className="mt-4">
-              <label className="block text-sm text-gray-700 mb-2">Phone number</label>
+              <label className="block text-sm text-gray-700 mb-2">
+                Phone number
+              </label>
               <input
                 type="tel"
                 value={phoneInput}
@@ -342,8 +398,18 @@ export default function Home() {
               />
 
               <div className="mt-4 flex justify-end gap-2">
-                <button type="button" onClick={closePhoneModal} className="px-4 py-2 rounded border">Close</button>
-                <button type="submit" disabled={phoneLoading} className="px-4 py-2 bg-indigo-600 text-white rounded">
+                <button
+                  type="button"
+                  onClick={closePhoneModal}
+                  className="px-4 py-2 rounded border"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={phoneLoading}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded"
+                >
                   {phoneLoading ? "Searching..." : "Search"}
                 </button>
               </div>
@@ -354,11 +420,94 @@ export default function Home() {
 
               {phoneDetails && (
                 <div className="mt-3 text-sm space-y-2">
-                  <div><strong>Name:</strong> {phoneDetails.name || "—"}</div>
-                  <div><strong>Type:</strong> {phoneDetails.type || "—"}</div>
-                  <div><strong>Last seen:</strong> {phoneDetails.lastSeen || "—"}</div>
-                  <div className="mt-2"><strong>Raw:</strong></div>
-                  <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto">{JSON.stringify(phoneDetails, null, 2)}</pre>
+                  <div>
+                    <strong>Name:</strong> {phoneDetails.name || "—"}
+                  </div>
+                  <div>
+                    <strong>Mobile:</strong> {phoneDetails.mobile || "—"}
+                  </div>
+                  <div>
+                    <strong>Email:</strong> {phoneDetails.email || "—"}
+                  </div>
+                  <div>
+                    <strong>Adults:</strong>{" "}
+                    {phoneDetails.no_of_reg_adults || 0}
+                  </div>
+                  <div>
+                    <strong>Children:</strong>{" "}
+                    {phoneDetails.no_of_reg_children || 0}
+                  </div>
+                  <div>
+                    <strong>Performing:</strong>{" "}
+                    {phoneDetails.preparing ? "Yes" : "No"}
+                  </div>
+                  <div className="mt-4">
+                    <label
+                      htmlFor="no_of_reg_adults"
+                      className="block text-sm text-gray-700 mb-2"
+                    >
+                      Number of Adults:
+                    </label>
+                    <input
+                      type="number"
+                      id="no_of_reg_adults"
+                      value={phoneDetails?.no_of_reg_adults || ""}
+                      onChange={(e) => {
+                        setPhoneDetails((prevDetails) => ({
+                          ...prevDetails,
+                          no_of_reg_adults: e.target.value,
+                        }));
+                      }}
+                      className="w-full border rounded px-3 py-2"
+                    />
+
+                    <label
+                      htmlFor="no_of_reg_children"
+                      className="block text-sm text-gray-700 mt-2 mb-2"
+                    >
+                      Number of Children:
+                    </label>
+                    <input
+                      type="number"
+                      id="no_of_reg_children"
+                      value={phoneDetails?.no_of_reg_children || ""}
+                      onChange={(e) => {
+                        setPhoneDetails((prevDetails) => ({
+                          ...prevDetails,
+                          no_of_reg_children: e.target.value,
+                        }));
+                      }}
+                      className="w-full border rounded px-3 py-2"
+                    />
+
+                    <label
+                      htmlFor="performing"
+                      className="block text-sm text-gray-700 mt-2 mb-2"
+                    >
+                      Performing:
+                    </label>
+                    <select
+                      id="performing"
+                      value={phoneDetails?.performing || ""}
+                      onChange={(e) => {
+                        setPhoneDetails((prevDetails) => ({
+                          ...prevDetails,
+                          performing: e.target.value,
+                        }));
+                      }}
+                      className="w-full border rounded px-3 py-2"
+                    >
+                      <option value="">Select</option>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                  </div>
+                  <div className="mt-2">
+                    <strong>Raw:</strong>
+                  </div>
+                  <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto">
+                    {JSON.stringify(phoneDetails, null, 2)}
+                  </pre>
 
                   <div className="mt-3 flex justify-end gap-2">
                     <button

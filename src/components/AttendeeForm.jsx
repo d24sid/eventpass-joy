@@ -1,20 +1,20 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { User, Phone, Users, Baby, Star } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { User, Phone, Users, Baby, Star } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const AttendeeForm = ({ initialData, onConfirm, onCancel, isLoading }) => {
   const [formData, setFormData] = useState({
-    name: initialData?.name || '',
-    phone: initialData?.phone || '',
+    name: initialData?.name || "",
+    phone: initialData?.phone || "",
     adults: initialData?.adults || 1,
     children: initialData?.children || 0,
     performing: initialData?.performing || false,
-    ...initialData
+    ...initialData,
   });
 
   const handleSubmit = (e) => {
@@ -23,7 +23,7 @@ const AttendeeForm = ({ initialData, onConfirm, onCancel, isLoading }) => {
   };
 
   const updateField = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   return (
@@ -49,7 +49,7 @@ const AttendeeForm = ({ initialData, onConfirm, onCancel, isLoading }) => {
             Just a few quick details to complete your check-in
           </p>
         </CardHeader>
-        
+
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Name Field */}
@@ -66,7 +66,7 @@ const AttendeeForm = ({ initialData, onConfirm, onCancel, isLoading }) => {
               <Input
                 id="name"
                 value={formData.name}
-                onChange={(e) => updateField('name', e.target.value)}
+                onChange={(e) => updateField("name", e.target.value)}
                 placeholder="Enter your full name"
                 className="bg-background/50 border-border/50 focus:border-primary transition-colors"
                 required
@@ -88,7 +88,7 @@ const AttendeeForm = ({ initialData, onConfirm, onCancel, isLoading }) => {
                 id="phone"
                 type="tel"
                 value={formData.phone}
-                onChange={(e) => updateField('phone', e.target.value)}
+                onChange={(e) => updateField("phone", e.target.value)}
                 placeholder="(555) 123-4567"
                 className="bg-background/50 border-border/50 focus:border-primary transition-colors"
                 required
@@ -112,7 +112,9 @@ const AttendeeForm = ({ initialData, onConfirm, onCancel, isLoading }) => {
                 min="1"
                 max="20"
                 value={formData.adults}
-                onChange={(e) => updateField('adults', parseInt(e.target.value) || 1)}
+                onChange={(e) =>
+                  updateField("adults", parseInt(e.target.value) || 1)
+                }
                 className="bg-background/50 border-border/50 focus:border-primary transition-colors"
               />
             </motion.div>
@@ -134,7 +136,9 @@ const AttendeeForm = ({ initialData, onConfirm, onCancel, isLoading }) => {
                 min="0"
                 max="20"
                 value={formData.children}
-                onChange={(e) => updateField('children', parseInt(e.target.value) || 0)}
+                onChange={(e) =>
+                  updateField("children", parseInt(e.target.value) || 0)
+                }
                 className="bg-background/50 border-border/50 focus:border-primary transition-colors"
               />
             </motion.div>
@@ -160,7 +164,9 @@ const AttendeeForm = ({ initialData, onConfirm, onCancel, isLoading }) => {
               <Switch
                 id="performing"
                 checked={formData.performing}
-                onCheckedChange={(checked) => updateField('performing', checked)}
+                onCheckedChange={(checked) =>
+                  updateField("performing", checked)
+                }
               />
             </motion.div>
 
@@ -185,7 +191,7 @@ const AttendeeForm = ({ initialData, onConfirm, onCancel, isLoading }) => {
                 className="flex-1 bounce-hover bg-gradient-primary hover:opacity-90 transition-opacity"
                 disabled={isLoading || !formData.name || !formData.phone}
               >
-                {isLoading ? 'Checking in...' : 'Confirm Check-in ✨'}
+                {isLoading ? "Checking in..." : "Confirm Check-in ✨"}
               </Button>
             </motion.div>
           </form>
