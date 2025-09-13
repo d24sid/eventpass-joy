@@ -18,7 +18,6 @@ export default function Home() {
   const [showScanModal, setShowScanModal] = useState(false);
 
   const [loading, setLoading] = useState(false);
-  const [details, setDetails] = useState(null);
   const [error, setError] = useState(null);
 
   const [phoneModalOpen, setPhoneModalOpen] = useState(false);
@@ -27,7 +26,7 @@ export default function Home() {
   const [phoneDetails, setPhoneDetails] = useState(null);
   const [phoneError, setPhoneError] = useState(null);
 
-  const COOLDOWN_MS = 3500;
+  const COOLDOWN_MS = 35000;
 
   const fetchDetails = useCallback(async (id) => {
     if (fetchAbortRef.current) {
@@ -38,13 +37,13 @@ export default function Home() {
     fetchAbortRef.current = controller;
     setLoading(true);
     setError(null);
-    setDetails(null);
+    setPhoneDetails(null);
     isProcessingRef.current = true;
 
     try {
       const res = await getById(id, { signal: controller.signal });
       console.log("Fetched details:", res);
-      setDetails(res);
+      setPhoneDetails(res);
     } catch (err) {
       if (err?.name === "AbortError") {
         console.log("QR fetch aborted for id:", id);
@@ -60,7 +59,6 @@ export default function Home() {
   }, []);
 
   const fetchDetailsByPhone = useCallback(async (phone) => {
-    console.log("Fetching details for phone:", phone);
     if (phoneFetchAbortRef.current) {
       phoneFetchAbortRef.current.abort();
       phoneFetchAbortRef.current = null;
@@ -77,8 +75,9 @@ export default function Home() {
       if (!res || (Array.isArray(res) && res.length === 0)) {
         throw new Error("No records found for this phone number.");
       }
-      console.log("Fetched phone details:", res);
-      setPhoneDetails(res[0]);
+      const result = {...res[0], no_of_actual_adults: res[0].no_of_reg_adults, no_of_actual_children: res[0].no_of_reg_children};
+      console.log("Fetched phone details:", result);
+      setPhoneDetails(result);
     } catch (err) {
       if (err?.name === "AbortError") {
         console.log("Phone fetch aborted for:", phone);
@@ -139,7 +138,7 @@ export default function Home() {
 
       setScannedId(id);
       setShowScanModal(true);
-      setDetails(null);
+      setPhoneDetails(null);
       setError(null);
 
       stopScanner();
@@ -254,12 +253,11 @@ export default function Home() {
   };
 
   const markPresence = () => {
-    alert("Mark presence (implement as needed).");
+    console.log("markPresence", phoneDetails);
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-start bg-gray-50 p-6">
-      <h1 className="text-2xl font-semibold mb-4">Scan QR to check in</h1>
 
       {!showScanModal && !phoneModalOpen && (
         <div className="w-full max-w-md bg-white rounded-xl shadow p-4">
@@ -276,7 +274,7 @@ export default function Home() {
           <div className="mt-4 flex justify-center gap-2">
             <button
               onClick={openPhoneModal}
-              style={{ color: "white", backgroundColor: "#4F46E5" }}
+              style={{ color: "white", backgroundColor: "#4F46E5" , width: '100%'}}
               className="px-6 py-3 rounded-lg shadow hover:opacity-90 focus:outline-none"
             >
               Use Phone
@@ -285,17 +283,13 @@ export default function Home() {
 
           <div className="mt-3 text-sm text-gray-600 text-center">
             {error && <span className="text-red-600">Error: {error}</span>}
-            {!error && !scannedId && (
-              <span>Point camera at QR code to scan.</span>
-            )}
+            
             {!error && scannedId && !loading && !details && (
               <span>Scanned ID: {scannedId}</span>
             )}
           </div>
         </div>
       )}
-
-      {/* Scan Modal (opened after a scan) */}
       {showScanModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
@@ -326,23 +320,94 @@ export default function Home() {
                 </div>
               )}
 
-              {details && (
+              {phoneDetails && (
                 <div className="mt-4 space-y-2 text-sm">
+                                {phoneDetails && (
+                <div className="mt-3 text-sm space-y-2">
                   <div>
-                    <strong>Name:</strong> {details.name || "—"}
+                    <strong>Name:</strong> {phoneDetails.name || "—"}
                   </div>
                   <div>
-                    <strong>Type:</strong> {details.type || "—"}
+                    <strong>Mobile:</strong> {phoneDetails.mobile || "—"}
                   </div>
                   <div>
-                    <strong>Checked in at:</strong> {details.checkedAt || "—"}
+                    <strong>Email:</strong> {phoneDetails.email || "—"}
                   </div>
                   <div>
-                    <strong>Raw response:</strong>
+                    <strong>Adults:</strong>{" "}
+                    {phoneDetails.no_of_reg_adults || 0}
                   </div>
-                  <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto">
-                    {JSON.stringify(details, null, 2)}
-                  </pre>
+                  <div>
+                    <strong>Children:</strong>{" "}
+                    {phoneDetails.no_of_reg_children || 0}
+                  </div>
+                  <div>
+                    <strong>Performing:</strong>{" "}
+                    {phoneDetails.preparing ? "Yes" : "No"}
+                  </div>
+                  <div className="mt-4">
+                    <label
+                      htmlFor="no_of_reg_adults"
+                      className="block text-sm text-gray-700 mb-2"
+                    >
+                      Number of Adults:
+                    </label>
+                    <input
+                      type="number"
+                      id="no_of_reg_adults"
+                      value={phoneDetails?.no_of_reg_adults || ""}
+                      onChange={(e) => {
+                        setPhoneDetails((prevDetails) => ({
+                          ...prevDetails,
+                          no_of_actual_adults: e.target.value,
+                        }));
+                      }}
+                      className="w-full border rounded px-3 py-2"
+                    />
+
+                    <label
+                      htmlFor="no_of_reg_children"
+                      className="block text-sm text-gray-700 mt-2 mb-2"
+                    >
+                      Number of Children:
+                    </label>
+                    <input
+                      type="number"
+                      id="no_of_reg_children"
+                      value={phoneDetails?.no_of_reg_children || ""}
+                      onChange={(e) => {
+                        setPhoneDetails((prevDetails) => ({
+                          ...prevDetails,
+                          no_of_actual_children: e.target.value,
+                        }));
+                      }}
+                      className="w-full border rounded px-3 py-2"
+                    />
+
+                    <label
+                      htmlFor="performing"
+                      className="block text-sm text-gray-700 mt-2 mb-2"
+                    >
+                      Performing:
+                    </label>
+                    <select
+                      id="performing"
+                      value={phoneDetails?.performing || ""}
+                      onChange={(e) => {
+                        setPhoneDetails((prevDetails) => ({
+                          ...prevDetails,
+                          performing: e.target.value,
+                        }));
+                      }}
+                      className="w-full border rounded px-3 py-2"
+                    >
+                      <option value="">Select</option>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                  </div>
+                </div>
+              )}
                 </div>
               )}
             </div>
@@ -502,21 +567,19 @@ export default function Home() {
                       <option value="No">No</option>
                     </select>
                   </div>
-                  <div className="mt-2">
-                    <strong>Raw:</strong>
-                  </div>
-                  <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto">
-                    {JSON.stringify(phoneDetails, null, 2)}
-                  </pre>
 
                   <div className="mt-3 flex justify-end gap-2">
                     <button
-                      onClick={() => {
-                        alert("Confirm by phone (implement as needed).");
-                      }}
+                      onClick={markPresence}
                       className="px-4 py-2 bg-indigo-600 text-white rounded"
                     >
                       Confirm
+                    </button>
+                    <button
+                      onClick={closePhoneModal}
+                      className="px-4 py-2 rounded border"
+                    >
+                      Close
                     </button>
                   </div>
                 </div>
