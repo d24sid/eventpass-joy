@@ -12,7 +12,6 @@ const App = () => (
       <Toaster />
       <Sonner />
       <Home />
-
     </TooltipProvider>
   </QueryClientProvider>
 );
