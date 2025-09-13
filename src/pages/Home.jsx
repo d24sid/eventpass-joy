@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
-import { getById, getByPhone } from "../service";
+import { getById, getByPhone, updateById } from "../service";
 
 export default function Home() {
   const videoRef = useRef(null);
@@ -43,16 +43,18 @@ export default function Home() {
 
       try {
         const res = await getById(id, { signal: controller.signal });
-        console.log("Fetched details:", res);
-        // Normalize to fields we use in UI
         const normalized = {
           ...res,
           no_of_actual_adults:
-            res.no_of_actual_adults ?? res.no_of_reg_adults ?? 0,
+            res.no_of_reg_adults,
           no_of_actual_children:
-            res.no_of_actual_children ?? res.no_of_reg_children ?? 0,
+            res.no_of_reg_children,
           preparing: !!res.preparing,
         };
+        console.log("Fetched details:", normalized);
+        if(normalized.present) {
+          alert("This attendee has already checked in.");
+        }
         setPhoneDetails(normalized);
       } catch (err) {
         if (err?.name === "AbortError") {
@@ -95,6 +97,9 @@ export default function Home() {
         preparing: !!r.preparing,
       };
       console.log("Fetched phone details:", result);
+      if(result.present) {
+        alert("This attendee has already checked in.");
+      }
       setPhoneDetails(result);
     } catch (err) {
       if (err?.name === "AbortError") {
@@ -231,7 +236,6 @@ export default function Home() {
       stopScanner();
     } catch (e) {}
 
-    // Reset modal state and restart scanner
     setShowScanModal(false);
     setScannedId(null);
     setPhoneDetails(null);
@@ -273,16 +277,14 @@ export default function Home() {
       setPhoneError("Enter a valid phone number (10 digits) .");
       return;
     }
-
     await fetchDetailsByPhone(trimmed);
   };
 
   const markPresence = () => {
-    // wire this up to your API / DB for actual check-in
-    console.log("markPresence", phoneDetails);
+    const req = {...phoneDetails, present: true};
+    updateById(phoneDetails.id, req);
   };
 
-  // helpers for updating numeric / boolean fields from inputs
   const setNumberField = (field, value) => {
     setPhoneDetails((prev) => ({
       ...prev,
@@ -404,7 +406,7 @@ export default function Home() {
                           type="number"
                           id="no_of_actual_adults"
                           value={
-                            phoneDetails?.no_of_actual_adults ?? phoneDetails?.no_of_reg_adults ?? ""
+                            phoneDetails?.no_of_actual_adults
                           }
                           onChange={(e) =>
                             setNumberField("no_of_actual_adults", e.target.value)
@@ -422,9 +424,7 @@ export default function Home() {
                           type="number"
                           id="no_of_actual_children"
                           value={
-                            phoneDetails?.no_of_actual_children ??
-                            phoneDetails?.no_of_reg_children ??
-                            ""
+                            phoneDetails?.no_of_actual_children
                           }
                           onChange={(e) =>
                             setNumberField("no_of_actual_children", e.target.value)
