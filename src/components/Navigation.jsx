@@ -6,9 +6,9 @@ const Navigation = () => {
   const location = useLocation();
 
   const navItems = [
-    { path: '/', label: 'Home', icon: Home },
-    { path: '/about', label: 'About', icon: Info },
-    { path: '/check-in', label: 'Check-In', icon: QrCode },
+    // { path: '/', label: 'Home', icon: Home },
+    // { path: '/about', label: 'About', icon: Info },
+    // { path: '/check-in', label: 'Check-In', icon: QrCode },
   ];
 
   return (

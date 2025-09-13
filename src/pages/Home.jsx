@@ -1,164 +1,425 @@
-import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
-import { QrCode, Users, Star, ArrowRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 
-const Home = () => {
-  const features = [
-    {
-      icon: QrCode,
-      title: 'Quick QR Scanning',
-      description: 'Scan your pass in seconds with our friendly scanner',
-      color: 'text-primary'
-    },
-    {
-      icon: Users,
-      title: 'Group Check-ins',
-      description: 'Check in your whole family or group together',
-      color: 'text-secondary'
-    },
-    {
-      icon: Star,
-      title: 'Performer Mode',
-      description: 'Special check-in flow for performers and VIPs',
-      color: 'text-accent'
+export default function Home() {
+  const videoRef = useRef(null);
+  const codeReaderRef = useRef(null);
+  const decodeActiveRef = useRef(false);
+
+  const lastHandledRef = useRef(null); // last handled ID
+  const ignoreUntilRef = useRef(0); // timestamp until which we ignore repeated scans
+  const fetchAbortRef = useRef(null); // for QR fetch
+  const isProcessingRef = useRef(false);
+
+  // phone modal abort controller
+  const phoneFetchAbortRef = useRef(null);
+
+  const [scannedId, setScannedId] = useState(null);
+  const [showScanModal, setShowScanModal] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [details, setDetails] = useState(null);
+  const [error, setError] = useState(null);
+
+  // Phone modal state
+  const [phoneModalOpen, setPhoneModalOpen] = useState(false);
+  const [phoneInput, setPhoneInput] = useState("");
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [phoneDetails, setPhoneDetails] = useState(null);
+  const [phoneError, setPhoneError] = useState(null);
+
+  // cooldown (ms) after handling a code or closing the modal to ignore same scans
+  const COOLDOWN_MS = 3500;
+
+  // ---------- QR fetch ----------
+  const fetchDetails = useCallback(async (id) => {
+    if (fetchAbortRef.current) {
+      fetchAbortRef.current.abort();
+      fetchAbortRef.current = null;
     }
-  ];
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
+    setLoading(true);
+    setError(null);
+    setDetails(null);
+    isProcessingRef.current = true;
+
+    try {
+      const res = await fetch(`/api/qr/${encodeURIComponent(id)}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => null);
+        throw new Error(txt || `Server returned ${res.status}`);
+      }
+      const json = await res.json();
+      setDetails(json);
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        console.log("QR fetch aborted for id:", id);
+      } else {
+        console.error("QR fetch error:", err);
+        setError(err?.message || "Failed to fetch details");
+      }
+    } finally {
+      setLoading(false);
+      isProcessingRef.current = false;
+      fetchAbortRef.current = null;
+    }
+  }, []);
+
+  // ---------- Phone fetch ----------
+  const fetchDetailsByPhone = useCallback(async (phone) => {
+    // abort previous phone request
+    if (phoneFetchAbortRef.current) {
+      phoneFetchAbortRef.current.abort();
+      phoneFetchAbortRef.current = null;
+    }
+    const controller = new AbortController();
+    phoneFetchAbortRef.current = controller;
+
+    setPhoneLoading(true);
+    setPhoneError(null);
+    setPhoneDetails(null);
+
+    try {
+      // adjust endpoint to your backend contract if needed
+      const res = await fetch(`/api/phone/${encodeURIComponent(phone)}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => null);
+        throw new Error(txt || `Server returned ${res.status}`);
+      }
+      const json = await res.json();
+      setPhoneDetails(json);
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        console.log("Phone fetch aborted for:", phone);
+      } else {
+        console.error("Phone fetch error:", err);
+        setPhoneError(err?.message || "Failed to fetch details by phone");
+      }
+    } finally {
+      setPhoneLoading(false);
+      phoneFetchAbortRef.current = null;
+    }
+  }, []);
+
+  // stop scanner and camera
+  const stopScanner = useCallback(() => {
+    decodeActiveRef.current = false;
+    const codeReader = codeReaderRef.current;
+    if (codeReader) {
+      try {
+        codeReader.reset();
+      } catch (e) {
+        // ignore
+      }
+    }
+    const video = videoRef.current;
+    if (video && video.srcObject) {
+      const tracks = video.srcObject.getTracks();
+      tracks.forEach((t) => {
+        try {
+          t.stop();
+        } catch (e) {}
+      });
+      try {
+        video.srcObject = null;
+      } catch (e) {}
+    }
+  }, []);
+
+  // handle scanned payload
+  const handleScanned = useCallback(
+    (data) => {
+      if (!data) return;
+      const id = String(data).trim();
+      if (!id) return;
+
+      const now = Date.now();
+
+      // If global cooldown active, ignore
+      if (now < ignoreUntilRef.current) {
+        return;
+      }
+
+      // If currently processing another code, ignore
+      if (isProcessingRef.current) return;
+
+      // If same id was just handled and not past cooldown, ignore
+      if (lastHandledRef.current === id && now < (ignoreUntilRef.current || 0)) {
+        return;
+      }
+
+      // We accept this id
+      lastHandledRef.current = id;
+      // set a short cooldown to prevent immediate re-handles
+      ignoreUntilRef.current = now + COOLDOWN_MS;
+
+      setScannedId(id);
+      setShowScanModal(true);
+      setDetails(null);
+      setError(null);
+
+      // stop scanner immediately to avoid multiple captures
+      stopScanner();
+
+      // call backend
+      fetchDetails(id);
+    },
+    [fetchDetails, stopScanner]
+  );
+
+  const startScanner = useCallback(async () => {
+    if (decodeActiveRef.current) return;
+    decodeActiveRef.current = true;
+    if (!codeReaderRef.current) codeReaderRef.current = new BrowserMultiFormatReader();
+    const codeReader = codeReaderRef.current;
+
+    const tryStart = async () => {
+      const constraints = { video: { facingMode: { exact: "environment" } } };
+      try {
+        await codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
+          if (result) handleScanned(result.getText());
+        });
+      } catch (e) {
+        try {
+          await codeReader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
+            if (result) handleScanned(result.getText());
+          });
+        } catch (err) {
+          console.error("Camera start failed:", err);
+          setError("Unable to access camera. Please allow camera permission or use a different device.");
+          decodeActiveRef.current = false;
+        }
+      }
+    };
+
+    await tryStart();
+  }, [handleScanned]);
+
+  // mount: start scanner
+  useEffect(() => {
+    startScanner();
+    return () => {
+      stopScanner();
+      if (fetchAbortRef.current) {
+        fetchAbortRef.current.abort();
+        fetchAbortRef.current = null;
+      }
+      if (phoneFetchAbortRef.current) {
+        phoneFetchAbortRef.current.abort();
+        phoneFetchAbortRef.current = null;
+      }
+    };
+  }, [startScanner, stopScanner]);
+
+  // close scan modal: abort fetch, stop camera and reload page (resets scanner & state)
+  const closeScanModal = useCallback(() => {
+    if (fetchAbortRef.current) {
+      try {
+        fetchAbortRef.current.abort();
+      } catch (e) {
+        /* ignore */
+      }
+      fetchAbortRef.current = null;
+    }
+
+    try {
+      stopScanner();
+    } catch (e) {
+      /* ignore */
+    }
+
+    // reload to reset everything (scanner, state)
+    window.location.reload();
+  }, [stopScanner]);
+
+  // phone modal open/close
+  const openPhoneModal = () => {
+    setPhoneModalOpen(true);
+    // stop scanner so camera doesn't keep running in background
+    stopScanner();
+  };
+  const closePhoneModal = () => {
+    // abort any in-flight phone fetch
+    if (phoneFetchAbortRef.current) {
+      try {
+        phoneFetchAbortRef.current.abort();
+      } catch (e) {
+        /* ignore */
+      }
+      phoneFetchAbortRef.current = null;
+    }
+    setPhoneModalOpen(false);
+    setPhoneInput("");
+    setPhoneDetails(null);
+    setPhoneError(null);
+    setPhoneLoading(false);
+
+    // restart scanner after closing phone modal
+    // small timeout to avoid immediate re-scan of same QR
+    setTimeout(() => startScanner(), 300);
+  };
+
+  // phone submit handler
+  const handlePhoneSubmit = async (e) => {
+    e?.preventDefault();
+    setPhoneDetails(null);
+    setPhoneError(null);
+
+    const trimmed = (phoneInput || "").replace(/\s+/g, "");
+    // basic validation: digits and + allowed, length 6-15
+    const ok = /^[+\d][\d]{5,14}$/.test(trimmed);
+    if (!ok) {
+      setPhoneError("Enter a valid phone number (6–15 digits, optional leading +).");
+      return;
+    }
+
+    // call API
+    await fetchDetailsByPhone(trimmed);
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-soft">
-      {/* Hero Section */}
-      <div className="container mx-auto px-4 py-16">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-center max-w-4xl mx-auto"
-        >
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: "spring", delay: 0.2, duration: 0.6 }}
-            className="w-24 h-24 bg-gradient-primary rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-glow"
-          >
-            <QrCode className="w-12 h-12 text-primary-foreground" />
-          </motion.div>
-          
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-primary bg-clip-text text-transparent"
-          >
-            Welcome to the GatePass App ✨
-          </motion.h1>
-          
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6 }}
-            className="text-xl text-muted-foreground mb-8 leading-relaxed"
-          >
-            Hey friend! Ready for an amazing experience? 🎉<br />
-            Check in quickly and easily - we've made it super simple for you!
-          </motion.p>
-          
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 }}
-            className="flex flex-col sm:flex-row gap-4 justify-center"
-          >
-            <Link to="/check-in">
-              <Button 
-                size="lg" 
-                className="bounce-hover bg-gradient-primary hover:opacity-90 transition-opacity text-lg px-8 py-4"
-              >
-                Start Check-in
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-            </Link>
-            <Link to="/about">
-              <Button 
-                variant="outline" 
-                size="lg"
-                className="bounce-hover text-lg px-8 py-4"
-              >
-                Learn More
-              </Button>
-            </Link>
-          </motion.div>
-        </motion.div>
+    <div className="min-h-screen flex flex-col items-center justify-start bg-gray-50 p-6">
+      <h1 className="text-2xl font-semibold mb-4">Scan QR to check in</h1>
 
-        {/* Features Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1, duration: 0.8 }}
-          className="mt-24"
-        >
-          <h2 className="text-3xl font-bold text-center mb-12">
-            Why you'll love our check-in process 💖
-          </h2>
-          
-          <div className="grid md:grid-cols-3 gap-8">
-            {features.map((feature, index) => {
-              const Icon = feature.icon;
-              return (
-                <motion.div
-                  key={feature.title}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 1.2 + index * 0.2 }}
-                >
-                  <Card className="hover:shadow-soft transition-all duration-300 bounce-hover bg-card/80 backdrop-blur-sm border-border/50">
-                    <CardContent className="p-8 text-center">
-                      <motion.div
-                        whileHover={{ scale: 1.1, rotate: 5 }}
-                        className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 ${feature.color} bg-current/10`}
-                      >
-                        <Icon className={`w-8 h-8 ${feature.color}`} />
-                      </motion.div>
-                      <h3 className="text-xl font-semibold mb-3">{feature.title}</h3>
-                      <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              );
-            })}
+      {!showScanModal && !phoneModalOpen && (
+        <div className="w-full max-w-md bg-white rounded-xl shadow p-4">
+          <div className="rounded overflow-hidden">
+            <video ref={videoRef} style={{ width: "100%", height: "auto" }} muted playsInline autoPlay />
           </div>
-        </motion.div>
 
-        {/* CTA Section */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 1.8, duration: 0.6 }}
-          className="mt-24 text-center"
-        >
-          <Card className="bg-gradient-primary text-primary-foreground shadow-glow border-0">
-            <CardContent className="p-12">
-              <h2 className="text-3xl font-bold mb-4">Ready to get started?</h2>
-              <p className="text-primary-foreground/90 mb-8 text-lg">
-                Join the fun! Your adventure is just one scan away 🚀
-              </p>
-              <Link to="/check-in">
-                <Button 
-                  variant="secondary"
-                  size="lg"
-                  className="bounce-hover text-lg px-8 py-4"
-                >
-                  Check In Now
-                  <QrCode className="w-5 h-5 ml-2" />
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-        </motion.div>
-      </div>
+          <div className="mt-4 flex justify-center gap-2">
+            <button
+              onClick={openPhoneModal}
+              style={{ color: "white", backgroundColor: "#4F46E5" }}
+              className="px-6 py-3 rounded-lg shadow hover:opacity-90 focus:outline-none"
+            >
+              Use Phone
+            </button>
+
+          </div>
+
+          <div className="mt-3 text-sm text-gray-600 text-center">
+            {error && <span className="text-red-600">Error: {error}</span>}
+            {!error && !scannedId && <span>Point camera at QR code to scan.</span>}
+            {!error && scannedId && !loading && !details && <span>Scanned ID: {scannedId}</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Scan Modal (opened after a scan) */}
+      {showScanModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog" aria-modal="true">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl">
+            <div className="flex justify-between items-start">
+              <h2 className="text-xl font-semibold">Check-in details</h2>
+              <button onClick={closeScanModal} className="text-gray-500 hover:text-gray-800" aria-label="Close">
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <div className="text-sm text-gray-600">
+                <strong>Scanned ID:</strong> {scannedId || "—"}
+              </div>
+
+              {loading && <div className="mt-4">Loading details…</div>}
+              {error && <div className="mt-4 text-red-600">Failed to load details: {error}</div>}
+
+              {details && (
+                <div className="mt-4 space-y-2 text-sm">
+                  <div><strong>Name:</strong> {details.name || "—"}</div>
+                  <div><strong>Type:</strong> {details.type || "—"}</div>
+                  <div><strong>Checked in at:</strong> {details.checkedAt || "—"}</div>
+                  <div><strong>Raw response:</strong></div>
+                  <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto">{JSON.stringify(details, null, 2)}</pre>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={closeScanModal} className="px-4 py-2 rounded border">Close</button>
+              <button
+                onClick={() => {
+                  // Example confirm action: implement POST to /api/qr/:id/checkin
+                  alert("Confirm action (implement as needed).");
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phone Modal */}
+      {phoneModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" role="dialog" aria-modal="true">
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
+            <div className="flex justify-between items-start">
+              <h2 className="text-xl font-semibold">Lookup by Phone</h2>
+              <button onClick={closePhoneModal} className="text-gray-500 hover:text-gray-800" aria-label="Close">
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handlePhoneSubmit} className="mt-4">
+              <label className="block text-sm text-gray-700 mb-2">Phone number</label>
+              <input
+                type="tel"
+                value={phoneInput}
+                onChange={(e) => setPhoneInput(e.target.value)}
+                placeholder="+911234567890 or 9876543210"
+                className="w-full border rounded px-3 py-2"
+                autoFocus
+              />
+
+              <div className="mt-4 flex justify-end gap-2">
+                <button type="button" onClick={closePhoneModal} className="px-4 py-2 rounded border">Close</button>
+                <button type="submit" disabled={phoneLoading} className="px-4 py-2 bg-indigo-600 text-white rounded">
+                  {phoneLoading ? "Searching..." : "Search"}
+                </button>
+              </div>
+            </form>
+
+            <div className="mt-4">
+              {phoneError && <div className="text-red-600">{phoneError}</div>}
+
+              {phoneDetails && (
+                <div className="mt-3 text-sm space-y-2">
+                  <div><strong>Name:</strong> {phoneDetails.name || "—"}</div>
+                  <div><strong>Type:</strong> {phoneDetails.type || "—"}</div>
+                  <div><strong>Last seen:</strong> {phoneDetails.lastSeen || "—"}</div>
+                  <div className="mt-2"><strong>Raw:</strong></div>
+                  <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto">{JSON.stringify(phoneDetails, null, 2)}</pre>
+
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        // Example: confirm check-in by phone; implement POST if needed
+                        alert("Confirm by phone (implement as needed).");
+                      }}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded"
+                    >
+                      Confirm
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-};
-
-export default Home;
+}
