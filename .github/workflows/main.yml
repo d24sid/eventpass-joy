@@ -7,9 +7,15 @@ on:
       - main
 
 permissions:
-  contents: write   # allow pushing to branches
+  contents: write
   pages: write
   id-token: write
+
+env:
+  PUBLISH_BRANCH: gh-pages
+  BUILD_DIR: dist
+  # Change this to your repo name if it's different
+  REPO_BASE: "/eventpass-joy/"
 
 jobs:
   build-and-deploy:
@@ -20,11 +26,11 @@ jobs:
       cancel-in-progress: true
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repository (use PAT if provided else GITHUB_TOKEN)
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.PAGES_PAT || github.token }}
           fetch-depth: 0
-          # keep default token (GITHUB_TOKEN) here
 
       - name: Use Node.js 18.x
         uses: actions/setup-node@v4
@@ -35,12 +41,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
+      - name: Build (Vite)
+        # expose VITE_BASE to build so generated assets use the correct base path
+        env:
+          VITE_BASE: ${{ env.REPO_BASE }}
         run: npm run build
+
+      - name: Show dist contents (debug)
+        run: |
+          echo "=== dist listing ==="
+          ls -la ${GITHUB_WORKSPACE}/${{ env.BUILD_DIR }} || true
+          echo "=== dist head ==="
+          sed -n '1,160p' ${GITHUB_WORKSPACE}/${{ env.BUILD_DIR }}/index.html || true
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: ./build
+          # peaceiris accepts a github_token input; we pass PAT if set else github.token
+          github_token: ${{ secrets.PAGES_PAT || github.token }}
+          publish_branch: ${{ env.PUBLISH_BRANCH }}
+          publish_dir: ${{ env.BUILD_DIR }}
+          # optional identity:
+          user_name: "github-actions[bot]"
+          user_email: "github-actions[bot]@users.noreply.github.com"
