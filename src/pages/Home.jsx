@@ -3,6 +3,7 @@ import { BrowserMultiFormatReader } from "@zxing/browser";
 import { getById, getByPhone, updateById } from "../service";
 
 export default function Home() {
+  // refs & state
   const videoRef = useRef(null);
   const codeReaderRef = useRef(null);
   const decodeActiveRef = useRef(false);
@@ -28,64 +29,89 @@ export default function Home() {
 
   const COOLDOWN_MS = 35000;
 
-  const fetchDetails = useCallback(
-    async (id) => {
-      if (fetchAbortRef.current) {
-        fetchAbortRef.current.abort();
-        fetchAbortRef.current = null;
-      }
-      const controller = new AbortController();
-      fetchAbortRef.current = controller;
-      setLoading(true);
-      setError(null);
-      setPhoneDetails(null);
-      isProcessingRef.current = true;
+  // ----- styles (inline) -----
+  const s = {
+    page: { minHeight: "100vh", display: "flex", alignItems: "flex-start", justifyContent: "center", background: "#f3f4f6", padding: 16 },
+    container: { width: "100%", maxWidth: 920, margin: "0 auto" },
+    card: { background: "#fff", borderRadius: 12, boxShadow: "0 6px 18px rgba(0,0,0,0.08)", padding: 20 },
+    videoWrap: { borderRadius: 8, overflow: "hidden", background: "#000" },
+    video: { width: "100%", height: "auto", display: "block", background: "#000" },
+    controls: { marginTop: 16, display: "flex", gap: 12, flexDirection: "row" },
+    primaryBtn: { flex: 1, padding: "12px 16px", background: "#4f46e5", color: "#fff", border: "none", borderRadius: 8, fontSize: 16, cursor: "pointer" },
+    secondaryBtn: { padding: "10px 12px", background: "#fff", color: "#111827", border: "1px solid #d1d5db", borderRadius: 8, cursor: "pointer" },
+    mutedText: { color: "#6b7280", fontSize: 14 },
+    overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 },
+    modal: { width: "100%", maxWidth: 760, background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 12px 30px rgba(0,0,0,0.25)" },
+    modalHeader: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+    modalTitle: { fontSize: 20, fontWeight: 600, color: "#111827" },
+    closeBtn: { background: "transparent", border: "none", fontSize: 20, cursor: "pointer", color: "#6b7280" },
+    fieldLabel: { display: "block", fontSize: 13, color: "#374151", marginBottom: 6, marginTop: 12 },
+    input: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 15 },
+    numberInput: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 15 },
+    smallText: { fontSize: 13, color: "#374151" },
+    pre: { background: "#f3f4f6", padding: 12, borderRadius: 8, fontSize: 12, overflowX: "auto" },
+    footerBtns: { marginTop: 18, display: "flex", justifyContent: "flex-end", gap: 8 },
+  };
 
-      try {
-        const res = await getById(id, { signal: controller.signal });
-        const normalized = {
-          ...res,
-          no_of_actual_adults:
-            res.no_of_reg_adults,
-          no_of_actual_children:
-            res.no_of_reg_children,
-          preparing: !!res.preparing,
-        };
-        console.log("Fetched details:", normalized);
-        if(normalized.present) {
-          alert("This attendee has already checked in.");
-        }
-        setPhoneDetails(normalized);
-      } catch (err) {
-        if (err?.name === "AbortError") {
-          console.log("QR fetch aborted for id:", id);
-        } else {
-          console.error("QR fetch error:", err);
-          setError(err?.message || "Failed to fetch details");
-        }
-      } finally {
-        setLoading(false);
-        isProcessingRef.current = false;
-        fetchAbortRef.current = null;
-      }
-    },
-    []
-  );
+  // ----- fetch by id (scan) -----
+  const fetchDetails = useCallback(async (id) => {
+    // abort previous
+    if (fetchAbortRef.current) {
+      try { fetchAbortRef.current.abort(); } catch (e) {}
+      fetchAbortRef.current = null;
+    }
+    const ctrl = new AbortController();
+    fetchAbortRef.current = ctrl;
 
+    setLoading(true);
+    setError(null);
+    setPhoneDetails(null);
+    // mark processing (extra guard)
+    isProcessingRef.current = true;
+
+    try {
+      const res = await getById(id, { signal: ctrl.signal });
+      const normalized = {
+        ...res,
+        no_of_actual_adults: res.no_of_reg_adults ?? 0,
+        no_of_actual_children: res.no_of_reg_children ?? 0,
+        preparing: !!res.preparing,
+      };
+      console.log("Fetched details:", normalized);
+      if (normalized.present) {
+        // gentle notice
+        alert("This attendee has already checked in.");
+      }
+      setPhoneDetails(normalized);
+    } catch (err) {
+      if (err?.name === "AbortError") {
+        console.log("QR fetch aborted for id:", id);
+      } else {
+        console.error("QR fetch error:", err);
+        setError(err?.message || "Failed to fetch details");
+      }
+    } finally {
+      setLoading(false);
+      isProcessingRef.current = false;
+      fetchAbortRef.current = null;
+    }
+  }, []);
+
+  // ----- fetch by phone -----
   const fetchDetailsByPhone = useCallback(async (phone) => {
     if (phoneFetchAbortRef.current) {
-      phoneFetchAbortRef.current.abort();
+      try { phoneFetchAbortRef.current.abort(); } catch (e) {}
       phoneFetchAbortRef.current = null;
     }
-    const controller = new AbortController();
-    phoneFetchAbortRef.current = controller;
+    const ctrl = new AbortController();
+    phoneFetchAbortRef.current = ctrl;
 
     setPhoneLoading(true);
     setPhoneError(null);
     setPhoneDetails(null);
 
     try {
-      const res = await getByPhone(phone, { signal: controller.signal });
+      const res = await getByPhone(phone, { signal: ctrl.signal });
       if (!res || (Array.isArray(res) && res.length === 0)) {
         throw new Error("No records found for this phone number.");
       }
@@ -97,9 +123,7 @@ export default function Home() {
         preparing: !!r.preparing,
       };
       console.log("Fetched phone details:", result);
-      if(result.present) {
-        alert("This attendee has already checked in.");
-      }
+      if (result.present) alert("This attendee has already checked in.");
       setPhoneDetails(result);
     } catch (err) {
       if (err?.name === "AbortError") {
@@ -114,98 +138,72 @@ export default function Home() {
     }
   }, []);
 
+  // ----- scanner controls -----
   const stopScanner = useCallback(() => {
     decodeActiveRef.current = false;
     const codeReader = codeReaderRef.current;
-    if (codeReader) {
-      try {
-        codeReader.reset();
-      } catch (e) {}
+    if (codeReader && codeReader.reset) {
+      try { codeReader.reset(); } catch (e) {}
     }
     const video = videoRef.current;
     if (video && video.srcObject) {
       const tracks = video.srcObject.getTracks();
-      tracks.forEach((t) => {
-        try {
-          t.stop();
-        } catch (e) {}
-      });
-      try {
-        video.srcObject = null;
-      } catch (e) {}
+      tracks.forEach((t) => { try { t.stop(); } catch (e) {} });
+      try { video.srcObject = null; } catch (e) {}
     }
   }, []);
 
-  const handleScanned = useCallback(
-    (data) => {
-      if (!data) return;
-      const id = String(data).trim();
-      if (!id) return;
+  const handleScanned = useCallback((data) => {
+    if (!data) return;
+    const id = String(data).trim();
+    if (!id) return;
 
-      const now = Date.now();
+    const now = Date.now();
+    if (now < ignoreUntilRef.current) return;
+    if (isProcessingRef.current) return;
+    if (lastHandledRef.current === id && now < ignoreUntilRef.current) return;
 
-      if (now < ignoreUntilRef.current) {
-        return;
-      }
+    // accept it — set guards immediately
+    lastHandledRef.current = id;
+    isProcessingRef.current = true;
+    ignoreUntilRef.current = now + COOLDOWN_MS;
 
-      if (isProcessingRef.current) return;
+    setScannedId(id);
+    setShowScanModal(true);
+    setPhoneDetails(null);
+    setError(null);
 
-      // Avoid handling same id repeatedly
-      if (lastHandledRef.current === id && now < ignoreUntilRef.current) {
-        return;
-      }
+    // stop camera ASAP
+    try { if (codeReaderRef.current?.reset) codeReaderRef.current.reset(); } catch (e) {}
+    stopScanner();
 
-      lastHandledRef.current = id;
-      ignoreUntilRef.current = now + COOLDOWN_MS;
-
-      setScannedId(id);
-      setShowScanModal(true);
-      setPhoneDetails(null);
-      setError(null);
-
-      stopScanner();
-
-      fetchDetails(id);
-    },
-    [fetchDetails, stopScanner]
-  );
+    // call backend
+    fetchDetails(id);
+  }, [fetchDetails, stopScanner]);
 
   const startScanner = useCallback(async () => {
     if (decodeActiveRef.current) return;
     decodeActiveRef.current = true;
-    if (!codeReaderRef.current)
-      codeReaderRef.current = new BrowserMultiFormatReader();
+    if (!codeReaderRef.current) codeReaderRef.current = new BrowserMultiFormatReader();
     const codeReader = codeReaderRef.current;
-
     const tryStart = async () => {
       const constraints = { video: { facingMode: { exact: "environment" } } };
       try {
-        await codeReader.decodeFromConstraints(
-          constraints,
-          videoRef.current,
-          (result) => {
-            if (result) handleScanned(result.getText());
-          }
-        );
+        await codeReader.decodeFromConstraints(constraints, videoRef.current, (result) => {
+          if (result) handleScanned(result.getText());
+        });
       } catch (e) {
         try {
-          await codeReader.decodeFromVideoDevice(
-            undefined,
-            videoRef.current,
-            (result) => {
-              if (result) handleScanned(result.getText());
-            }
-          );
+          await codeReader.decodeFromVideoDevice(undefined, videoRef.current, (result) => {
+            if (result) handleScanned(result.getText());
+          });
         } catch (err) {
           console.error("Camera start failed:", err);
-          setError(
-            "Unable to access camera. Please allow camera permission or use a different device."
-          );
+          setError("Unable to access camera. Please allow camera permission or use a different device.");
           decodeActiveRef.current = false;
         }
       }
     };
-
     await tryStart();
   }, [handleScanned]);
 
@@ -213,37 +211,23 @@ export default function Home() {
     startScanner();
     return () => {
       stopScanner();
-      if (fetchAbortRef.current) {
-        fetchAbortRef.current.abort();
-        fetchAbortRef.current = null;
-      }
-      if (phoneFetchAbortRef.current) {
-        phoneFetchAbortRef.current.abort();
-        phoneFetchAbortRef.current = null;
-      }
+      if (fetchAbortRef.current) { try { fetchAbortRef.current.abort(); } catch (e) {} fetchAbortRef.current = null; }
+      if (phoneFetchAbortRef.current) { try { phoneFetchAbortRef.current.abort(); } catch (e) {} phoneFetchAbortRef.current = null; }
     };
   }, [startScanner, stopScanner]);
 
   const closeScanModal = useCallback(() => {
     if (fetchAbortRef.current) {
-      try {
-        fetchAbortRef.current.abort();
-      } catch (e) {}
+      try { fetchAbortRef.current.abort(); } catch (e) {}
       fetchAbortRef.current = null;
     }
-
-    try {
-      stopScanner();
-    } catch (e) {}
-
+    try { stopScanner(); } catch (e) {}
     setShowScanModal(false);
     setScannedId(null);
     setPhoneDetails(null);
     setError(null);
-
-    setTimeout(() => {
-      startScanner();
-    }, 300);
+    // restart scanner after brief delay to avoid immediate re-scan
+    setTimeout(() => startScanner(), 300);
   }, [stopScanner, startScanner]);
 
   const openPhoneModal = () => {
@@ -252,9 +236,7 @@ export default function Home() {
   };
   const closePhoneModal = () => {
     if (phoneFetchAbortRef.current) {
-      try {
-        phoneFetchAbortRef.current.abort();
-      } catch (e) {}
+      try { phoneFetchAbortRef.current.abort(); } catch (e) {}
       phoneFetchAbortRef.current = null;
     }
     setPhoneModalOpen(false);
@@ -262,212 +244,140 @@ export default function Home() {
     setPhoneDetails(null);
     setPhoneError(null);
     setPhoneLoading(false);
-
     setTimeout(() => startScanner(), 300);
   };
 
+  // phone submit handler
   const handlePhoneSubmit = async (e) => {
     e?.preventDefault();
     setPhoneDetails(null);
     setPhoneError(null);
-
     const trimmed = (phoneInput || "").replace(/\s+/g, "");
     const ok = /^[+\d][\d]{5,14}$/.test(trimmed);
-    if (!ok) {
-      setPhoneError("Enter a valid phone number (10 digits) .");
-      return;
-    }
+    if (!ok) { setPhoneError("Enter a valid phone number (10 digits)."); return; }
     await fetchDetailsByPhone(trimmed);
   };
 
-  const markPresence = () => {
-    const req = {...phoneDetails, present: true};
-    updateById(phoneDetails.id, req);
+  // mark presence (update)
+  const markPresence = async () => {
+    if (!phoneDetails?.id) { alert("No record selected."); return; }
+    try {
+      setPhoneLoading(true);
+      const payload = {
+        // update only fields you want; keep payload minimal (patch semantics)
+        present: true,
+        no_of_actual_adults: phoneDetails.no_of_actual_adults ?? phoneDetails.no_of_reg_adults ?? 0,
+        no_of_actual_children: phoneDetails.no_of_actual_children ?? phoneDetails.no_of_reg_children ?? 0,
+        preparing: !!phoneDetails.preparing,
+      };
+      const updated = await updateById(phoneDetails.id, payload);
+      if (updated) {
+        // update UI with returned row if available
+        setPhoneDetails((prev) => ({ ...(prev || {}), ...(updated || {}) }));
+        alert("Checked in successfully.");
+      } else {
+        alert("Updated (no response body).");
+      }
+    } catch (err) {
+      console.error("Update failed:", err);
+      alert("Update failed: " + (err?.message || "unknown"));
+    } finally {
+      setPhoneLoading(false);
+      // lightweight UX: close modal and restart scanner shortly after success
+      setTimeout(() => {
+        setPhoneModalOpen(false);
+        setPhoneDetails(null);
+        setScannedId(null);
+        setTimeout(() => startScanner(), 300);
+      }, 700);
+    }
   };
 
+  // helpers to change numeric / boolean fields in the details object
   const setNumberField = (field, value) => {
     setPhoneDetails((prev) => ({
-      ...prev,
+      ...(prev || {}),
       [field]: value === "" ? "" : Number(value),
     }));
   };
   const setBooleanField = (field, value) => {
     setPhoneDetails((prev) => ({
-      ...prev,
+      ...(prev || {}),
       [field]: value === "Yes" || value === true,
     }));
   };
 
+  // --- render ---
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start bg-gray-50 py-6 px-4">
-      <div className="w-[90%] max-w-2xl mx-auto">
-        {/* Scanner card */}
+    <div style={s.page}>
+      <div style={s.container}>
+        {/* Scanner Card */}
         {!showScanModal && !phoneModalOpen && (
-          <div className="bg-white rounded-xl shadow p-5">
-            <div className="rounded overflow-hidden border border-gray-100">
-              <video
-                ref={videoRef}
-                className="w-full h-auto rounded-md bg-black"
-                muted
-                playsInline
-                autoPlay
-              />
+          <div style={s.card}>
+            <div style={s.videoWrap}>
+              <video ref={videoRef} style={s.video} muted playsInline autoPlay />
             </div>
 
-            <div className="mt-4 flex flex-col sm:flex-row gap-3">
-              <button
-                onClick={openPhoneModal}
-                className="w-full sm:w-auto flex-1 px-6 py-3 text-base font-medium rounded-lg shadow bg-indigo-600 text-white hover:bg-indigo-700 focus:outline-none"
-              >
-                Use Phone
-              </button>
-
+            <div style={s.controls}>
+              <button type="button" onClick={openPhoneModal} style={s.primaryBtn}>Use Phone</button>
             </div>
 
-            <div className="mt-3 text-sm text-gray-600 text-center">
-              {error && (
-                <span className="text-red-600 text-sm">Error: {error}</span>
-              )}
-
-              {!error && scannedId && !loading && !phoneDetails && (
-                <span className="text-gray-700">Scanned ID: {scannedId}</span>
-              )}
-
-              {!error && loading && <div className="text-gray-500">Loading…</div>}
+            <div style={{ marginTop: 12, textAlign: "center" }}>
+              {error && <div style={{ color: "#dc2626" }}>Error: {error}</div>}
+              {!error && scannedId && !loading && !phoneDetails && <div style={s.mutedText}>Scanned ID: {scannedId}</div>}
+              {!error && loading && <div style={s.mutedText}>Loading…</div>}
             </div>
           </div>
         )}
 
         {/* Scanned Modal */}
         {showScanModal && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="bg-white rounded-xl w-[90%] max-w-lg p-6 shadow-xl">
-              <div className="flex justify-between items-start">
-                <h2 className="text-2xl font-semibold text-gray-800">
-                  Check-in details
-                </h2>
-                <button
-                  onClick={closeScanModal}
-                  className="text-gray-500 hover:text-gray-800 text-lg"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
+          <div style={s.overlay}>
+            <div style={s.modal} role="dialog" aria-modal="true">
+              <div style={s.modalHeader}>
+                <div style={s.modalTitle}>Check-in details</div>
+                <button aria-label="Close" onClick={closeScanModal} style={s.closeBtn}>✕</button>
               </div>
 
-              <div className="mt-4 text-sm text-gray-700 space-y-3">
-                <div>
-                  <strong className="text-base">Scanned ID:</strong>{" "}
-                  <span className="text-gray-600">{scannedId || "—"}</span>
-                </div>
+              <div style={{ marginTop: 14 }}>
+                <div style={s.smallText}><strong>Scanned ID:</strong> <span style={{ color: "#374151" }}>{scannedId || "—"}</span></div>
 
-                {loading && <div className="text-gray-500">Loading details…</div>}
-                {error && (
-                  <div className="text-red-600">Failed to load details: {error}</div>
-                )}
+                {loading && <div style={{ marginTop: 12 }}>Loading details…</div>}
+                {error && <div style={{ marginTop: 12, color: "#dc2626" }}>Failed to load details: {error}</div>}
 
                 {phoneDetails && (
-                  <div className="mt-2">
-                    <div className="space-y-2 text-sm text-gray-700">
-                      <div>
-                        <strong>Name:</strong> {phoneDetails.name || "—"}
-                      </div>
-                      <div>
-                        <strong>Mobile:</strong> {phoneDetails.mobile || "—"}
-                      </div>
-                      <div>
-                        <strong>Email:</strong> {phoneDetails.email || "—"}
-                      </div>
-                      <div>
-                        <strong>Adults (registered):</strong>{" "}
-                        {phoneDetails.no_of_reg_adults ?? 0}
-                      </div>
-                      <div>
-                        <strong>Children (registered):</strong>{" "}
-                        {phoneDetails.no_of_reg_children ?? 0}
-                      </div>
-                      <div>
-                        <strong>Performing:</strong>{" "}
-                        {phoneDetails.preparing ? "Yes" : "No"}
-                      </div>
+                  <div style={{ marginTop: 12 }}>
+                    <div style={s.smallText}><strong>Name:</strong> {phoneDetails.name || "—"}</div>
+                    <div style={s.smallText}><strong>Mobile:</strong> {phoneDetails.mobile || "—"}</div>
+                    <div style={s.smallText}><strong>Email:</strong> {phoneDetails.email || "—"}</div>
+                    <div style={s.smallText}><strong>Adults (registered):</strong> {phoneDetails.no_of_reg_adults ?? 0}</div>
+                    <div style={s.smallText}><strong>Children (registered):</strong> {phoneDetails.no_of_reg_children ?? 0}</div>
+                    <div style={s.smallText}><strong>Performing:</strong> {phoneDetails.preparing ? "Yes" : "No"}</div>
 
-                      <div className="mt-4">
-                        <label
-                          htmlFor="no_of_actual_adults"
-                          className="block text-sm font-medium text-gray-700 mb-2"
-                        >
-                          Number of Adults:
-                        </label>
-                        <input
-                          type="number"
-                          id="no_of_actual_adults"
-                          value={
-                            phoneDetails?.no_of_actual_adults
-                          }
-                          onChange={(e) =>
-                            setNumberField("no_of_actual_adults", e.target.value)
-                          }
-                          className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-indigo-500"
-                        />
+                    <div style={{ marginTop: 14 }}>
+                      <label style={s.fieldLabel}>Number of Adults:</label>
+                      <input type="number" value={phoneDetails.no_of_actual_adults ?? ""} onChange={(e) => setNumberField("no_of_actual_adults", e.target.value)} style={s.numberInput} />
 
-                        <label
-                          htmlFor="no_of_actual_children"
-                          className="block text-sm font-medium text-gray-700 mt-3 mb-2"
-                        >
-                          Number of Children:
-                        </label>
-                        <input
-                          type="number"
-                          id="no_of_actual_children"
-                          value={
-                            phoneDetails?.no_of_actual_children
-                          }
-                          onChange={(e) =>
-                            setNumberField("no_of_actual_children", e.target.value)
-                          }
-                          className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-indigo-500"
-                        />
+                      <label style={s.fieldLabel}>Number of Children:</label>
+                      <input type="number" value={phoneDetails.no_of_actual_children ?? ""} onChange={(e) => setNumberField("no_of_actual_children", e.target.value)} style={s.numberInput} />
 
-                        <label
-                          htmlFor="preparing"
-                          className="block text-sm font-medium text-gray-700 mt-3 mb-2"
-                        >
-                          Performing:
-                        </label>
-                        <select
-                          id="preparing"
-                          value={phoneDetails?.preparing ? "Yes" : "No"}
-                          onChange={(e) =>
-                            setBooleanField("preparing", e.target.value)
-                          }
-                          className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-indigo-500"
-                        >
-                          <option value="Yes">Yes</option>
-                          <option value="No">No</option>
-                        </select>
+                      <label style={s.fieldLabel}>Performing (Bathukamma):</label>
+                      <select value={phoneDetails.preparing ? "Yes" : "No"} onChange={(e) => setBooleanField("preparing", e.target.value)} style={s.input}>
+                        <option value="Yes">Yes</option>
+                        <option value="No">No</option>
+                      </select>
+
+                      <div style={{ marginTop: 12 }}>
+                        <div style={s.pre}>{JSON.stringify(phoneDetails, null, 2)}</div>
                       </div>
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="mt-6 flex justify-end gap-2">
-                <button
-                  onClick={closeScanModal}
-                  className="px-4 py-2 rounded border"
-                >
-                  Close
-                </button>
-                <button
-                  onClick={markPresence}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                >
-                  Confirm
-                </button>
+              <div style={s.footerBtns}>
+                <button onClick={closeScanModal} style={s.secondaryBtn}>Close</button>
+                <button onClick={markPresence} style={s.primaryBtn} disabled={phoneLoading}>{phoneLoading ? "Updating…" : "Confirm"}</button>
               </div>
             </div>
           </div>
@@ -475,156 +385,51 @@ export default function Home() {
 
         {/* Phone Modal */}
         {phoneModalOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-            role="dialog"
-            aria-modal="true"
-          >
-            <div className="bg-white rounded-xl w-[90%] max-w-md p-6 shadow-xl">
-              <div className="flex justify-between items-start">
-                <h2 className="text-2xl font-semibold text-gray-800">
-                  Lookup by Phone
-                </h2>
-                <button
-                  onClick={closePhoneModal}
-                  className="text-gray-500 hover:text-gray-800 text-lg"
-                  aria-label="Close"
-                >
-                  ✕
-                </button>
+          <div style={s.overlay}>
+            <div style={{ ...s.modal, maxWidth: 520 }} role="dialog" aria-modal="true">
+              <div style={s.modalHeader}>
+                <div style={s.modalTitle}>Lookup by Phone</div>
+                <button aria-label="Close" onClick={closePhoneModal} style={s.closeBtn}>✕</button>
               </div>
 
-              <form onSubmit={handlePhoneSubmit} className="mt-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone number
-                </label>
-                <input
-                  type="tel"
-                  value={phoneInput}
-                  onChange={(e) => setPhoneInput(e.target.value)}
-                  placeholder="9876543210"
-                  className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-indigo-500"
-                  autoFocus
-                />
+              <form onSubmit={handlePhoneSubmit} style={{ marginTop: 12 }}>
+                <label style={s.fieldLabel}>Phone number</label>
+                <input type="tel" value={phoneInput} onChange={(e) => setPhoneInput(e.target.value)} placeholder="9876543210" style={s.input} autoFocus />
 
-                <div className="mt-4 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={closePhoneModal}
-                    className="px-4 py-2 rounded border"
-                  >
-                    Close
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={phoneLoading}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                  >
-                    {phoneLoading ? "Searching..." : "Search"}
-                  </button>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+                  <button type="button" onClick={closePhoneModal} style={s.secondaryBtn}>Close</button>
+                  <button type="submit" disabled={phoneLoading} style={s.primaryBtn}>{phoneLoading ? "Searching…" : "Search"}</button>
                 </div>
               </form>
 
-              <div className="mt-4">
-                {phoneError && <div className="text-red-600">{phoneError}</div>}
+              <div style={{ marginTop: 14 }}>
+                {phoneError && <div style={{ color: "#dc2626" }}>{phoneError}</div>}
 
                 {phoneDetails && (
-                  <div className="mt-3 text-sm space-y-2 text-gray-700">
-                    <div>
-                      <strong>Name:</strong> {phoneDetails.name || "—"}
-                    </div>
-                    <div>
-                      <strong>Mobile:</strong> {phoneDetails.mobile || "—"}
-                    </div>
-                    <div>
-                      <strong>Email:</strong> {phoneDetails.email || "—"}
-                    </div>
-                    <div>
-                      <strong>Adults (registered):</strong>{" "}
-                      {phoneDetails.no_of_reg_adults ?? 0}
-                    </div>
-                    <div>
-                      <strong>Children (registered):</strong>{" "}
-                      {phoneDetails.no_of_reg_children ?? 0}
-                    </div>
-                    <div>
-                      <strong>Performing:</strong>{" "}
-                      {phoneDetails.preparing ? "Yes" : "No"}
+                  <div style={{ marginTop: 12 }}>
+                    <div style={s.smallText}><strong>Name:</strong> {phoneDetails.name || "—"}</div>
+                    <div style={s.smallText}><strong>Mobile:</strong> {phoneDetails.mobile || "—"}</div>
+                    <div style={s.smallText}><strong>Email:</strong> {phoneDetails.email || "—"}</div>
+
+                    <label style={s.fieldLabel}>Number of Adults</label>
+                    <input type="number" value={phoneDetails.no_of_actual_adults ?? ""} onChange={(e) => setNumberField("no_of_actual_adults", e.target.value)} style={s.numberInput} />
+
+                    <label style={s.fieldLabel}>Number of Children</label>
+                    <input type="number" value={phoneDetails.no_of_actual_children ?? ""} onChange={(e) => setNumberField("no_of_actual_children", e.target.value)} style={s.numberInput} />
+
+                    <label style={s.fieldLabel}>Performing (Bathukamma)</label>
+                    <select value={phoneDetails.preparing ? "Yes" : "No"} onChange={(e) => setBooleanField("preparing", e.target.value)} style={s.input}>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+
+                    <div style={{ marginTop: 12 }}>
+                      <div style={s.pre}>{JSON.stringify(phoneDetails, null, 2)}</div>
                     </div>
 
-                    <div className="mt-4">
-                      <label
-                        htmlFor="no_of_reg_adults"
-                        className="block text-sm font-medium text-gray-700 mb-2"
-                      >
-                        Number of Adults:
-                      </label>
-                      <input
-                        type="number"
-                        id="no_of_reg_adults"
-                        value={
-                          phoneDetails?.no_of_actual_adults ??
-                          phoneDetails?.no_of_reg_adults ??
-                          ""
-                        }
-                        onChange={(e) =>
-                          setNumberField("no_of_actual_adults", e.target.value)
-                        }
-                        className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-indigo-500"
-                      />
-
-                      <label
-                        htmlFor="no_of_reg_children"
-                        className="block text-sm font-medium text-gray-700 mt-3 mb-2"
-                      >
-                        Number of Children:
-                      </label>
-                      <input
-                        type="number"
-                        id="no_of_reg_children"
-                        value={
-                          phoneDetails?.no_of_actual_children ??
-                          phoneDetails?.no_of_reg_children ??
-                          ""
-                        }
-                        onChange={(e) =>
-                          setNumberField("no_of_actual_children", e.target.value)
-                        }
-                        className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-indigo-500"
-                      />
-
-                      <label
-                        htmlFor="performing"
-                        className="block text-sm font-medium text-gray-700 mt-3 mb-2"
-                      >
-                        Performing:
-                      </label>
-                      <select
-                        id="performing"
-                        value={phoneDetails?.preparing ? "Yes" : "No"}
-                        onChange={(e) =>
-                          setBooleanField("preparing", e.target.value)
-                        }
-                        className="w-full border rounded-lg px-3 py-2 text-base focus:ring-2 focus:ring-indigo-500"
-                      >
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
-                      </select>
-                    </div>
-
-                    <div className="mt-3 flex justify-end gap-2">
-                      <button
-                        onClick={markPresence}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-                      >
-                        Confirm
-                      </button>
-                      <button
-                        onClick={closePhoneModal}
-                        className="px-4 py-2 rounded border"
-                      >
-                        Close
-                      </button>
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 12 }}>
+                      <button onClick={markPresence} style={s.primaryBtn} disabled={phoneLoading}>{phoneLoading ? "Updating…" : "Confirm"}</button>
+                      <button onClick={closePhoneModal} style={s.secondaryBtn}>Close</button>
                     </div>
                   </div>
                 )}
