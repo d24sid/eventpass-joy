@@ -397,7 +397,7 @@ export default function Home() {
       return;
     }
     await fetchDetailsByPhone(trimmed);
-    refreshPage();
+    // refreshPage();
   };
 
   // mark presence (update)
