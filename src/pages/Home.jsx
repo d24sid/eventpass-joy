@@ -579,7 +579,7 @@ export default function Home() {
                       />
 
                       <label style={s.fieldLabel}>
-                        Performing (Bathukamma):
+                        Bringing Bathukamma:
                       </label>
                       <select
                         value={phoneDetails.preparing ? "Yes" : "No"}
