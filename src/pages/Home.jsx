@@ -708,7 +708,7 @@ export default function Home() {
                       style={s.numberInput}
                     />
 
-                    <label style={s.fieldLabel}>Performing (Bathukamma)</label>
+                    <label style={s.fieldLabel}>Bringing Bathukamma</label>
                     <select
                       value={phoneDetails.preparing ? "Yes" : "No"}
                       onChange={(e) =>
