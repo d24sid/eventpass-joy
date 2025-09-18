@@ -59,6 +59,49 @@ export async function updateById(id, patchObj, { signal } = {}) {
   return Array.isArray(data) && data.length ? data[0] : null;
 }
 
+export async function insert(formData = {}, { signal } = {}) {
+  if (!formData || !formData.name) {
+    throw new Error("insert: formData.name is required");
+  }
+
+  // normalize phone
+  const mobile = String(formData.mobile ?? "").replace(/\s+/g, "");
+  if (!mobile) {
+    throw new Error("insert: formData.mobile is required");
+  }
+
+  // Build payload with sensible defaults and both reg/actual fields handled.
+  const payload = {
+    name: formData.name,
+    mobile,
+    email: formData.email || null,
+    // prefer explicit reg fields, fall back to actual fields or 0
+    no_of_reg_adults: formData.no_of_actual_adults ?? 0,
+    no_of_reg_children: formData.no_of_actual_children ?? 0,
+    no_of_actual_adults: formData.no_of_actual_adults ?? 0,
+    no_of_actual_children: formData.no_of_actual_children ?? 0,
+    preparing: !!formData.preparing,
+    first_time: !!formData.first_time,
+    present: !!formData.present || false,
+    // optionally include submitted_at if you want client timestamp
+    submitted_at: formData.submitted_at ?? new Date().toISOString(),
+    raw_response: formData.raw_response ?? null,
+    present: true
+  };
+
+  const res = await fetch(ENDPOINT, {
+    method: "POST",
+    headers: buildHeaders({ Prefer: "return=representation" }),
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  const data = await parseResponse(res);
+  // Supabase returns an array when using return=representation
+  return Array.isArray(data) && data.length ? data[0] : data;
+}
+
+
 export default {
   getById,
   getByPhone,
